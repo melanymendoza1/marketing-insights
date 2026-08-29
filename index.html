@@ -49,7 +49,7 @@
   body{background:var(--bg);color:var(--text);font-family:var(--fb);line-height:1.5;-webkit-font-smoothing:antialiased}
   .wrap{max-width:1140px;margin:0 auto;padding:0 22px 80px}
   header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:24px 0 6px}
-  .logo{width:42px;height:42px;border-radius:11px;background:transparent;display:grid;place-items:center;box-shadow:none}
+  .logo{width:42px;height:42px;border-radius:11px;background:transparent;display:grid;place-items:center;overflow:hidden}
   h1{font-family:var(--fd);font-weight:800;font-size:22px;margin:0;letter-spacing:-.01em}
   .sub{margin:1px 0 0;font-size:12.5px;color:var(--muted)}
   .spacer{flex:1}
@@ -181,6 +181,18 @@
   .dot-anim{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite}
   @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
   @media (prefers-reduced-motion:reduce){.dot-anim{animation:none}}
+  .modal.wide{max-width:720px}
+  .gtabs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px}
+  .gtab{font-family:var(--fd);font-weight:600;font-size:11.5px;padding:6px 10px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface);color:var(--muted);cursor:pointer;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gtab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .gtable-wrap{max-height:190px;overflow:auto;border:1px solid var(--border);border-radius:9px;margin:6px 0 12px}
+  .gtable{border-collapse:collapse;font-size:11px;font-family:var(--fm)}
+  .gtable td{border:1px solid var(--border);padding:3px 6px;white-space:nowrap;color:var(--muted)}
+  .gtable tr.hrow td{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .gmap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:4px}
+  @media(max-width:620px){.gmap{grid-template-columns:1fr 1fr}}
+  .ghint{font-size:10.5px;color:var(--faint);margin-top:3px}
+  .gprev{margin-top:10px;font-size:12.5px;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 11px}
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -222,7 +234,7 @@ function activeBrands(){ return BRANDS.filter(function(b){ return fB==="all"||fB
 
 // ---- SHELL ----
 var SHELL='<div class="wrap">'
-+'<header><div class="logo"><img src="logo.png" alt="Logo" style="width:100%;height:100%;object-fit:contain;border-radius:11px"></div> <div><h1>Marketing Insights</h1><p class="sub">Inversión, tráfico y resultados · Ford · Chery · Mazda · Ram · Dongfeng</p></div>'
++'<header><div class="logo"><img src="logo.png" alt="Logo" style="width:100%;height:100%;object-fit:contain"></div><div><h1>Marketing Insights</h1><p class="sub">Inversión, tráfico y resultados · Ford · Chery · Mazda · Ram · Dongfeng</p></div>'
 +'<div class="spacer"></div><div id="saveslot"></div>'
 +'<button class="btn" id="exportBtn">↓ Exportar</button>'
 +'<div class="menu-wrap"><button class="btn primary" id="regBtn">+ Registrar</button><div class="menu" id="regMenu" hidden>'
@@ -570,9 +582,11 @@ function renderImport(){
     +'<div style="flex:1;min-width:220px"><div style="font-family:var(--fd);font-weight:700;font-size:14px">Carga masiva desde Excel</div>'
     +'<div style="font-size:12.5px;color:var(--muted);margin-top:3px">Dos formas de cargar: descarga la plantilla, llénala y súbela — o registra a mano con “+ Registrar”. Acepta .xlsx y .csv.</div></div>'
     +'<button class="btn" id="tplBtn">↓ Descargar plantilla</button>'
-    +(readOnly?'':'<label class="btn primary" style="cursor:pointer;position:relative">⇧ Subir Excel / CSV<input type="file" id="importInput" accept=".xlsx,.xls,.csv" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label>')
+    +(readOnly?'':'<label class="btn primary" style="cursor:pointer;position:relative">⇧ Subir plantilla<input type="file" id="importInput" accept=".xlsx,.xls,.csv" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label>')
+    +(readOnly?'':'<button class="btn" id="guidedBtn">✦ Importar mis Excel (guiado)</button>')
     +'</div>';
   el("tplBtn").onclick=downloadTemplate;
+  if(el("guidedBtn")) el("guidedBtn").onclick=openGuided;
   if(el("importInput")) el("importInput").onchange=function(e){ var f=e.target.files[0]; if(f) importFile(f); e.target.value=""; };
 }
 function downloadTemplate(){
@@ -646,6 +660,98 @@ function handleRows(rows){
     else toast("Cargados: "+addC.length+" pauta · "+addT.length+" tráfico · "+addE.length+" eventos"+(skipped?" ("+skipped+" filas omitidas)":""));
   });
 }
+
+// ---- Importador guiado (Excel crudo, mapeo de columnas) ----
+var GST={files:[],cur:0};
+function openGuided(){
+  var html='<div class="overlay" id="overlay"><div class="modal wide"><h3>Importar mis Excel (guiado)</h3>'
+   +'<p class="msub">Sube tus presupuestos tal cual (varios a la vez). Por cada archivo eliges marca, tipo y mes, y qué columna es cada dato. Funciona con cualquier formato.</p>'
+   +'<div class="field"><label>Archivos .xlsx / .csv (puedes elegir varios)</label><input type="file" id="gInput" accept=".xlsx,.xls,.csv" multiple></div>'
+   +'<div id="gBody"></div>'
+   +'<div class="modal-actions"><div class="spacer"></div><button type="button" class="btn" id="gClose">Cerrar</button></div></div></div>';
+  var ov=document.createElement("div"); ov.innerHTML=html; document.body.appendChild(ov.firstChild);
+  el("overlay").addEventListener("mousedown",function(e){ if(e.target.id==="overlay")closeForm(); });
+  el("gClose").onclick=closeForm;
+  el("gInput").onchange=function(e){ gParse(e.target.files); };
+}
+function gParse(fileList){
+  var arr=[].slice.call(fileList); GST={files:[],cur:0}; var pending=arr.length; if(!pending)return;
+  if(!window.XLSX){ toast("El lector de Excel aún carga, reintenta en unos segundos."); return; }
+  arr.forEach(function(f){ var rd=new FileReader(); var isCsv=/\.csv$/i.test(f.name);
+    rd.onload=function(){ try{ var wb= isCsv? XLSX.read(rd.result,{type:"string"}) : XLSX.read(new Uint8Array(rd.result),{type:"array"});
+        GST.files.push({name:f.name,wb:wb,sheet:wb.SheetNames[0],marca:"",tipo:"evento",mes:(fM!=="all"?fM:""),header:0,map:{},_mapped:false});
+      }catch(err){ GST.files.push({name:f.name,error:true}); }
+      pending--; if(pending===0){ GST.cur=0; gRender(); } };
+    if(isCsv) rd.readAsText(f); else rd.readAsArrayBuffer(f); });
+}
+function rowsOf(f){ return XLSX.utils.sheet_to_json(f.wb.Sheets[f.sheet],{header:1,raw:false,defval:""}); }
+function colLetter(i){ return XLSX.utils.encode_col(i); }
+function gAutoMap(f,hdr){ if(f._mapped)return;
+  var find=function(subs){ for(var i=0;i<hdr.length;i++){ var h=stripAcc(hdr[i]); for(var k=0;k<subs.length;k++){ if(h.indexOf(subs[k])>=0)return i; } } return null; };
+  if(f.tipo==="evento"){ f.map={nombre:find(["detalle","nombre","descripc","accion","item"]),inversion:find(["v.total","total","valor","inversion","costo","monto"]),leads:find(["leads"]),trafico:find(["trafico","visitas"]),cotizaciones:find(["cotiz"]),nota:find(["nota","observ"])}; }
+  else if(f.tipo==="pauta"){ f.map={modelo:find(["producto","modelo","nombre","detalle"]),inversion:find(["total","inversion","valor","monto"]),leads:find(["leads"]),cpl:find(["cpl"])}; }
+  else { f.map={modelo:find(["producto","modelo","nombre"]),personas:find(["personas","trafico","visitas"]),inversion:find(["inversion","total","valor"]),sierra:find(["sierra"]),costa:find(["costa"])}; }
+  f._mapped=true;
+}
+function colOptions(hdr,cur,reqLbl){ var o='<option value="">'+reqLbl+'</option>'; for(var i=0;i<hdr.length;i++){ o+='<option value="'+i+'"'+(cur===i?' selected':'')+'>'+colLetter(i)+' — '+esc(String(hdr[i]).slice(0,22)||"(vacía)")+'</option>'; } return o; }
+function mapSel(f,key,label,hdr,req){ return '<div class="field"><label>'+label+(req?' *':'')+'</label><select data-map="'+key+'">'+colOptions(hdr,(f.map[key]==null?null:f.map[key]),req?'— elige —':'(ninguna)')+'</select></div>'; }
+function gMapFields(f,hdr){
+  if(f.tipo==="evento") return mapSel(f,"nombre","Nombre / Detalle",hdr,true)+mapSel(f,"inversion","Inversión (V.Total)",hdr,true)+mapSel(f,"leads","Leads",hdr,false)+mapSel(f,"trafico","Tráfico",hdr,false)+mapSel(f,"cotizaciones","Cotizaciones",hdr,false)+mapSel(f,"nota","Nota",hdr,false);
+  if(f.tipo==="pauta") return mapSel(f,"modelo","Modelo / Producto",hdr,true)+mapSel(f,"inversion","Inversión total",hdr,true)+mapSel(f,"leads","Leads",hdr,false)+mapSel(f,"cpl","CPL",hdr,false);
+  return mapSel(f,"modelo","Modelo",hdr,true)+mapSel(f,"personas","Personas / Tráfico",hdr,true)+mapSel(f,"inversion","Inversión",hdr,false)+mapSel(f,"sierra","Costo Sierra",hdr,false)+mapSel(f,"costa","Costo Costa",hdr,false);
+}
+function gNum(v){ v=String(v).replace(/[$,\s]/g,""); var x=parseFloat(v); return isNaN(x)?0:x; }
+function gNull(v){ v=String(v).replace(/[$,\s]/g,""); if(v==="")return null; var x=parseFloat(v); return isNaN(x)?null:x; }
+function gIsTotal(s){ return /^(sub ?total|subtotal|total|totales|suma|gran total)$/.test(stripAcc(s)); }
+function gBuild(f,rows){
+  var recs=[]; var mv=function(r,key){ var ci=f.map[key]; if(ci==null)return ""; return r[ci]!=null?String(r[ci]).trim():""; };
+  for(var i=f.header+1;i<rows.length;i++){ var r=rows[i]; if(!r||!r.join("").trim())continue;
+    if(f.tipo==="evento"){ var nm=mv(r,"nombre"); var cost=gNum(mv(r,"inversion")); if(!nm||cost<=0||gIsTotal(nm))continue;
+      recs.push({brand:f.marca,month:f.mes,name:nm,cost:cost,photo:"",leads:gNull(mv(r,"leads")),trafico:gNull(mv(r,"trafico")),cotizaciones:gNull(mv(r,"cotizaciones")),veredicto:"",nota:mv(r,"nota")}); }
+    else if(f.tipo==="pauta"){ var md=mv(r,"modelo"); var inv=gNum(mv(r,"inversion")); if(!md||inv<=0||gIsTotal(md))continue;
+      recs.push({brand:f.marca,model:md,month:f.mes,aware:0,consid:0,conv:inv,leads:gNum(mv(r,"leads")),cpl:gNum(mv(r,"cpl"))}); }
+    else { var m2=mv(r,"modelo"); var pers=gNum(mv(r,"personas")); if(!m2||pers<=0||gIsTotal(m2))continue;
+      recs.push({brand:f.marca,model:m2,month:f.mes,personas:pers,inversion:gNum(mv(r,"inversion")),sierra:gNull(mv(r,"sierra")),costa:gNull(mv(r,"costa"))}); }
+  }
+  return recs;
+}
+function gRender(){
+  var b=el("gBody"); if(!b)return; if(!GST.files.length){ b.innerHTML=""; return; }
+  var tabs=GST.files.map(function(f,i){ return '<button class="gtab'+(i===GST.cur?" on":"")+'" data-i="'+i+'">'+esc(f.name)+(f.done?" ✓":"")+'</button>'; }).join("");
+  var f=GST.files[GST.cur]; var body="";
+  if(f.error){ body='<div class="empty">No pude leer este archivo. Guárdalo como .xlsx o .csv y reintenta.</div>'; }
+  else if(f.done){ body='<div class="empty">✓ Archivo ya cargado.</div>'; }
+  else {
+    var rows=rowsOf(f); var hdr=rows[f.header]||[]; gAutoMap(f,hdr);
+    var sheetSel='<select id="gSheet">'+f.wb.SheetNames.map(function(sn){return '<option'+(sn===f.sheet?" selected":"")+'>'+esc(sn)+'</option>';}).join("")+'</select>';
+    var brandSel='<select id="gMarca"><option value="">— elige —</option>'+BRANDS.map(function(x){return '<option value="'+x.key+'"'+(f.marca===x.key?" selected":"")+'>'+x.name+'</option>';}).join("")+'</select>';
+    var tipoSel='<select id="gTipo">'+[["evento","Evento / BTL"],["pauta","Pauta digital"],["trafico","Tráfico"]].map(function(t){return '<option value="'+t[0]+'"'+(f.tipo===t[0]?" selected":"")+'>'+t[1]+'</option>';}).join("")+'</select>';
+    var end=Math.min(rows.length,f.header+9);
+    var preview='<div class="gtable-wrap"><table class="gtable">'; for(var ri=0;ri<end;ri++){ var r=rows[ri]||[]; preview+='<tr'+(ri===f.header?' class="hrow"':'')+'>'; for(var ci=0;ci<Math.min(10,Math.max(r.length,hdr.length));ci++){ preview+='<td>'+esc(String(r[ci]==null?"":r[ci]).slice(0,16))+'</td>'; } preview+='</tr>'; } preview+='</table></div>';
+    var recs=gBuild(f,rows); var ready=recs.length&&f.marca&&f.mes;
+    body='<div class="frow3"><div class="field"><label>Hoja</label>'+sheetSel+'</div><div class="field"><label>Marca</label>'+brandSel+'</div><div class="field"><label>Tipo</label>'+tipoSel+'</div></div>'
+      +'<div class="frow"><div class="field"><label>Mes (año-mes)</label><input type="month" id="gMes" value="'+(f.mes||"")+'"><div class="ghint">Si el archivo no dice el mes, ponlo aquí.</div></div>'
+      +'<div class="field"><label>Fila de encabezados</label><input type="number" id="gHeader" min="0" value="'+f.header+'"><div class="ghint">Qué fila tiene los títulos (0 = la primera).</div></div></div>'
+      +preview
+      +'<div class="gmap">'+gMapFields(f,hdr)+'</div>'
+      +'<div class="gprev">Se cargarán <b>'+recs.length+'</b> registros'+(f.marca?'':' — elige la marca')+(f.mes?'':' — pon el mes')+'.</div>'
+      +'<div style="display:flex;gap:9px;margin-top:12px"><button class="btn primary" id="gImport"'+(ready?'':' disabled')+'>Cargar '+recs.length+' registros</button><button class="btn" id="gSkip">Saltar</button></div>';
+  }
+  b.innerHTML='<div class="gtabs">'+tabs+'</div>'+body;
+  b.querySelectorAll(".gtab").forEach(function(t){ t.onclick=function(){ GST.cur=+t.dataset.i; gRender(); }; });
+  var on=function(id,key){ var e=el(id); if(!e)return; e.addEventListener("change",function(){ f[key]=(e.type==="number")?(+e.value):e.value; if(key==="sheet"){f.header=0;f._mapped=false;f.map={};} if(key==="tipo"){f._mapped=false;f.map={};} if(key==="header"){f._mapped=false;f.map={};} gRender(); }); };
+  on("gSheet","sheet"); on("gMarca","marca"); on("gTipo","tipo"); on("gMes","mes"); on("gHeader","header");
+  b.querySelectorAll("[data-map]").forEach(function(sel){ sel.onchange=function(){ f.map[sel.dataset.map]= sel.value===""?null:(+sel.value); gRender(); }; });
+  if(el("gImport")) el("gImport").onclick=function(){ gImport(f); };
+  if(el("gSkip")) el("gSkip").onclick=function(){ f.done=true; gNext(); };
+}
+function gImport(f){
+  var recs=gBuild(f,rowsOf(f)); if(!recs.length||!f.marca||!f.mes){ toast("Faltan marca, mes o columnas."); return; }
+  var type=f.tipo==="evento"?"event":f.tipo==="pauta"?"campaign":"traffic";
+  setSaving(true);
+  remoteBulk(type,recs).then(function(r){ if(r&&r.error){ setSaving(false); toast("Error al cargar: "+r.error.message); return; } f.done=true; toast("Cargados "+recs.length+" registros de "+f.name); loadAll(); gNext(); });
+}
+function gNext(){ var n=-1; for(var i=0;i<GST.files.length;i++){ if(!GST.files[i].done&&!GST.files[i].error){ n=i; break; } } if(n<0){ toast("¡Listo! Todos los archivos procesados."); closeForm(); } else { GST.cur=n; gRender(); } }
 
 // ---- export ----
 function exportData(){
