@@ -345,10 +345,22 @@ function brandSection(bk){
 function addLinkBig(type,bk,txt){ return '<button class="btn sm" data-new="'+type+'" data-brand="'+bk+'">+ '+txt+'</button>'; }
 function monthTags(recs){ var s={}; recs.forEach(function(r){if(r.month)s[r.month]=1;}); return Object.keys(s).sort().map(monthLabel).join(", "); }
 
-function normModel(s){ return stripAcc(s).replace(/\s+/g," "); }
+function canonicalModel(raw){
+  var s=stripAcc(raw).replace(/\s+/g," ");
+  if(s.indexOf("exonerado")>=0) return "Ranger Exonerados";
+  if(s.indexOf("ranger")>=0) return "Ranger";
+  if(s.indexOf("escape")>=0) return "Escape";
+  if(s.indexOf("everest")>=0) return "Everest";
+  if(s.indexOf("explorer")>=0) return "Explorer";
+  if(s.indexOf("territory")>=0) return "Territory";
+  if(s.indexOf("bronco")>=0) return "Bronco";
+  if(s.indexOf("f150")>=0||s.indexOf("f-150")>=0||s.indexOf("f 150")>=0) return "F-150";
+  return String(raw||"").trim();
+}
+function normModel(s){ return stripAcc(canonicalModel(s)); }
 function pautaBlock(bk,camp){
   var groups={}, order=[];
-  camp.forEach(function(c){ var key=normModel(c.model); if(!groups[key]){ groups[key]={key:key,model:c.model,aware:0,consid:0,conv:0,leads:0,meses:0}; order.push(key); } var g=groups[key]; g.aware+=(c.aware||0); g.consid+=(c.consid||0); g.conv+=(c.conv||0); g.leads+=(c.leads||0); g.meses++; });
+  camp.forEach(function(c){ var canon=canonicalModel(c.model); var key=stripAcc(canon); if(!groups[key]){ groups[key]={key:key,model:canon,aware:0,consid:0,conv:0,leads:0,meses:0}; order.push(key); } var g=groups[key]; g.aware+=(c.aware||0); g.consid+=(c.consid||0); g.conv+=(c.conv||0); g.leads+=(c.leads||0); g.meses++; });
   var all=order.map(function(k){return groups[k];});
   var gtot=function(g){return g.aware+g.consid+g.conv;};
   var sel=state[bk]||"all";
@@ -382,7 +394,7 @@ function trafficBlock(bk,traf,bc){
   var byMonth={}; traf.forEach(function(t){ byMonth[t.month]=(byMonth[t.month]||0)+(t.personas||0); });
   var pairs=Object.keys(byMonth).sort().map(function(m){return {m:m,v:byMonth[m]};});
   // zona por modelo (ultimo valor no nulo)
-  var zm={}; traf.forEach(function(t){ if(!zm[t.model])zm[t.model]={s:0,c:0}; if(t.sierra)zm[t.model].s=t.sierra; if(t.costa)zm[t.model].c=t.costa; });
+  var zm={}; traf.forEach(function(t){ var m=canonicalModel(t.model); if(!zm[m])zm[m]={s:0,c:0}; if(t.sierra)zm[m].s=t.sierra; if(t.costa)zm[m].c=t.costa; });
   var zkeys=Object.keys(zm).filter(function(m){return zm[m].s||zm[m].c;});
   var mxZ=1; zkeys.forEach(function(m){mxZ=Math.max(mxZ,zm[m].s,zm[m].c);});
   var zona=zkeys.sort(function(a,b){return Math.max(zm[b].s,zm[b].c)-Math.max(zm[a].s,zm[a].c);}).map(function(m){
@@ -390,7 +402,7 @@ function trafficBlock(bk,traf,bc){
       +'<div class="zrow s"><div class="zt" style="width:'+(zm[m].s/mxZ*100)+'%"></div><div class="zv">$'+zm[m].s+' sierra</div></div>'
       +'<div class="zrow c"><div class="zt" style="width:'+(zm[m].c/mxZ*100)+'%"></div><div class="zv">$'+zm[m].c+' costa</div></div></div></div>';}).join("");
   // modtraf por modelo
-  var pm={}; traf.forEach(function(t){ if(!pm[t.model])pm[t.model]={p:0,inv:0,id:t.id}; pm[t.model].p+=(t.personas||0); pm[t.model].inv+=(t.inversion||0); });
+  var pm={}; traf.forEach(function(t){ var m=canonicalModel(t.model); if(!pm[m])pm[m]={p:0,inv:0,id:t.id}; pm[m].p+=(t.personas||0); pm[m].inv+=(t.inversion||0); });
   var mt=Object.keys(pm).map(function(m){var o=pm[m];var c=o.p>0?Math.round(o.inv/o.p):0;
     return '<div class="mt"><div class="mth"><b>'+esc(m)+'</b><span class="cpu">'+(c?"$"+c:"—")+'<span class="per"> /pers</span></span>'
       +(readOnly?'':'<button class="mt-edit" data-edit="traffic:'+o.id+'" title="Editar">✎</button>')+'</div>'
