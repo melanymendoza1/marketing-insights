@@ -180,6 +180,10 @@
   .saving{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
   .dot-anim{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite}
   @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+  .fdrop{display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;padding:5px 8px 5px 13px}
+  .fdrop span{font-family:var(--fd);font-weight:600;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+  .fdrop select{border:0;background:transparent;font-family:var(--fd);font-weight:600;font-size:13.5px;color:var(--text);cursor:pointer;padding:4px 4px;max-width:200px}
+  .fdrop select:focus{outline:none}
   @media (prefers-reduced-motion:reduce){.dot-anim{animation:none}}
   .modal.wide{max-width:720px}
   .gtabs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px}
@@ -462,10 +466,10 @@ function attachTips(){
 // ---- filters chrome ----
 function renderChrome(){
   var months=allMonths();
-  el("months").innerHTML='<button class="chip" data-m="all" aria-pressed="'+(fM==="all")+'">Todos los meses</button>'
-    +months.map(function(m){return '<button class="chip" data-m="'+m+'" aria-pressed="'+(fM===m)+'">'+monthLabel(m)+'</button>';}).join("");
-  el("brands").innerHTML='<button class="chip" data-b="all" aria-pressed="'+(fB==="all")+'">Todas las marcas</button>'
-    +BRANDS.map(function(b){return '<button class="chip" data-b="'+b.key+'" aria-pressed="'+(fB===b.key)+'">'+b.name+'</button>';}).join("");
+  el("brands").innerHTML='<label class="fdrop"><span>Marca</span><select id="marcaSel"><option value="all"'+(fB==="all"?" selected":"")+'>Todas las marcas</option>'
+    +BRANDS.map(function(b){return '<option value="'+b.key+'"'+(fB===b.key?" selected":"")+'>'+b.name+'</option>';}).join("")+'</select></label>';
+  el("months").innerHTML='<label class="fdrop"><span>Mes</span><select id="mesSel"><option value="all"'+(fM==="all"?" selected":"")+'>Todos los meses</option>'
+    +months.map(function(m){return '<option value="'+m+'"'+(fM===m?" selected":"")+'>'+monthLabel(m)+'</option>';}).join("")+'</select></label>';
 }
 
 // ---- forms ----
@@ -812,8 +816,8 @@ function fallbackCopy(str){ try{ navigator.clipboard.writeText(str); toast("Dato
 // ---- events / binding ----
 function el(id){return document.getElementById(id);}
 function bind(){
-  el("months").addEventListener("click",function(e){var b=e.target.closest(".chip");if(!b)return;fM=b.dataset.m;renderChrome();render();});
-  el("brands").addEventListener("click",function(e){var b=e.target.closest(".chip");if(!b)return;fB=b.dataset.b;renderChrome();render();});
+  el("months").addEventListener("change",function(e){if(e.target.id!=="mesSel")return;fM=e.target.value;render();});
+  el("brands").addEventListener("change",function(e){if(e.target.id!=="marcaSel")return;fB=e.target.value;render();});
   el("regBtn").addEventListener("click",function(e){e.stopPropagation();var m=el("regMenu");m.hidden=!m.hidden;});
   document.addEventListener("click",function(){var m=el("regMenu");if(m)m.hidden=true;});
   el("regMenu").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;openForm(b.dataset.new);});
