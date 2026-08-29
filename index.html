@@ -311,7 +311,7 @@ function render(){
   attachTips();
 }
 function kpi(l,v,s,hi){return '<div class="kpi'+(hi?' hi':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>';}
-function addLink(type,brand){ if(readOnly) return ''; return '<button class="btn sm add" data-new="'+type+'" data-brand="'+brand+'">+ Agregar</button>'; }
+function addLink(type,brand){ return ''; }
 
 function brandSection(bk){
   var bc='var(--'+bk+'-ink)';
