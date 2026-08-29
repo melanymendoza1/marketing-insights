@@ -335,22 +335,28 @@ function brandSection(bk){
 function addLinkBig(type,bk,txt){ return '<button class="btn sm" data-new="'+type+'" data-brand="'+bk+'">+ '+txt+'</button>'; }
 function monthTags(recs){ var s={}; recs.forEach(function(r){if(r.month)s[r.month]=1;}); return Object.keys(s).sort().map(monthLabel).join(", "); }
 
+function normModel(s){ return stripAcc(s).replace(/\s+/g," "); }
 function pautaBlock(bk,camp){
-  var models=[]; var seen={}; camp.forEach(function(c){ if(!seen[c.model]){seen[c.model]=1;models.push(c.model);} });
+  var groups={}, order=[];
+  camp.forEach(function(c){ var key=normModel(c.model); if(!groups[key]){ groups[key]={key:key,model:c.model,aware:0,consid:0,conv:0,leads:0,meses:0}; order.push(key); } var g=groups[key]; g.aware+=(c.aware||0); g.consid+=(c.consid||0); g.conv+=(c.conv||0); g.leads+=(c.leads||0); g.meses++; });
+  var all=order.map(function(k){return groups[k];});
+  var gtot=function(g){return g.aware+g.consid+g.conv;};
   var sel=state[bk]||"all";
-  var shown=sel==="all"?camp:camp.filter(function(c){return c.model===sel;});
-  var mxM=Math.max.apply(null,camp.map(campTotal))||1;
+  var shown=sel==="all"?all:all.filter(function(g){return g.key===sel;});
+  var mxM=Math.max.apply(null,all.map(gtot))||1;
+  var multi=all.some(function(g){return g.meses>1;});
   var filter='<div class="modfilter"><label>Filtrar modelo</label><select data-brand="'+bk+'"><option value="all"'+(sel==="all"?" selected":"")+'>Todos los modelos</option>'
-    +models.map(function(m){return '<option value="'+esc(m)+'"'+(sel===m?" selected":"")+'>'+esc(m)+'</option>';}).join("")+'</select></div>';
-  var byModel=[...shown].sort(function(a,b){return campTotal(b)-campTotal(a);}).map(function(c){var t=campTotal(c);
-    return '<div class="hbar"><div class="hl">'+esc(c.model)+'</div><div class="htrack"><div class="seg" style="width:'+(t/mxM*100)+'%;background:var(--'+bk+')" data-tip="'+esc(c.model)+': '+money(t)+' · '+(c.leads||"—")+' leads · CPL '+(c.cpl?"$"+c.cpl:"—")+'" data-edit="campaign:'+c.id+'"></div></div><div class="hv">'+money(t)+'</div></div>';}).join("");
-  var byStage=shown.map(function(c){var t=campTotal(c);
-    return '<div class="hbar"><div class="hl">'+esc(c.model)+'</div><div class="htrack">'
-      +'<div class="seg" style="width:'+((c.aware||0)/mxM*100)+'%;background:var(--st1)" data-tip="Awareness · '+money(c.aware)+'"></div>'
-      +'<div class="seg" style="width:'+((c.consid||0)/mxM*100)+'%;background:var(--st2)" data-tip="Consideración · '+money(c.consid)+'"></div>'
-      +'<div class="seg" style="width:'+((c.conv||0)/mxM*100)+'%;background:var(--st3)" data-tip="Conversión · '+money(c.conv)+'"></div>'
+    +all.map(function(g){return '<option value="'+esc(g.key)+'"'+(sel===g.key?" selected":"")+'>'+esc(g.model)+'</option>';}).join("")+'</select>'
+    +(multi?'<span class="ghint" style="margin-left:2px">Cada modelo suma sus meses. Filtra por mes arriba para ver uno solo.</span>':'')+'</div>';
+  var byModel=shown.slice().sort(function(a,b){return gtot(b)-gtot(a);}).map(function(g){ var t=gtot(g); var cpl=g.leads>0?(g.conv/g.leads):0;
+    return '<div class="hbar"><div class="hl">'+esc(g.model)+'</div><div class="htrack"><div class="seg" style="width:'+(t/mxM*100)+'%;background:var(--'+bk+')" data-tip="'+esc(g.model)+': '+money(t)+' · '+(g.leads?Math.round(g.leads)+" leads":"— leads")+(cpl?" · CPL $"+cpl.toFixed(1):"")+(g.meses>1?" · "+g.meses+" meses":"")+'"></div></div><div class="hv">'+money(t)+'</div></div>';}).join("");
+  var byStage=shown.slice().sort(function(a,b){return gtot(b)-gtot(a);}).map(function(g){var t=gtot(g);
+    return '<div class="hbar"><div class="hl">'+esc(g.model)+'</div><div class="htrack">'
+      +'<div class="seg" style="width:'+(g.aware/mxM*100)+'%;background:var(--st1)" data-tip="Awareness · '+money(g.aware)+'"></div>'
+      +'<div class="seg" style="width:'+(g.consid/mxM*100)+'%;background:var(--st2)" data-tip="Consideración · '+money(g.consid)+'"></div>'
+      +'<div class="seg" style="width:'+(g.conv/mxM*100)+'%;background:var(--st3)" data-tip="Conversión · '+money(g.conv)+'"></div>'
       +'</div><div class="hv">'+money(t)+'</div></div>';}).join("");
-  return filter+'<div class="charts"><div class="chart"><h4>Inversión por modelo</h4><p class="cap">Total invertido en cada modelo. Pasa el cursor para leads y CPL; toca la barra para editar.</p>'+byModel+'</div>'
+  return filter+'<div class="charts"><div class="chart"><h4>Inversión por modelo</h4><p class="cap">Total invertido en cada modelo (suma de los meses del filtro). Pasa el cursor para leads y CPL.</p>'+byModel+'</div>'
     +'<div class="chart"><h4>Inversión por etapa del embudo</h4><p class="cap">Reparto entre awareness, consideración y conversión. Pasa el cursor sobre cada tramo.</p>'+byStage
     +'<div class="legend"><span><i style="background:var(--st1)"></i>Awareness</span><span><i style="background:var(--st2)"></i>Consideración</span><span><i style="background:var(--st3)"></i>Conversión</span></div></div></div>';
 }
