@@ -703,7 +703,31 @@ function gMapFields(f,hdr){
 function gNum(v){ v=String(v).replace(/[$,\s]/g,""); var x=parseFloat(v); return isNaN(x)?0:x; }
 function gNull(v){ v=String(v).replace(/[$,\s]/g,""); if(v==="")return null; var x=parseFloat(v); return isNaN(x)?null:x; }
 function gIsTotal(s){ return /^(sub ?total|subtotal|total|totales|suma|gran total)$/.test(stripAcc(s)); }
+function gDigCols(rows){
+  for(var i=0;i<rows.length && i<20;i++){ var r=rows[i]||[]; var low=r.map(function(c){return stripAcc(c);});
+    var iM=low.indexOf("producto"), iC=low.indexOf("cpl");
+    if(iM>=0 && iC>=0){ var iL=-1; for(var x=iC+1;x<low.length;x++){ if(low[x]==="leads"){iL=x;break;} } if(iL<0)iL=iC+1;
+      return {model:iM,cpl:iC,leads:iL}; } }
+  return null;
+}
+function gParseDigital(f,rows){
+  var c=f.digCols||gDigCols(rows); if(!c)return [];
+  var recs=[], k=c.leads;
+  for(var i=0;i<rows.length;i++){ var r=rows[i]||[];
+    var idn=parseFloat(String(r[0]==null?"":r[0]).replace(/[^0-9.]/g,""));
+    var model=r[c.model]!=null?String(r[c.model]).trim():"";
+    if(isNaN(idn)||!model||gIsTotal(model)||stripAcc(model)==="producto")continue;
+    var conv=gNum(r[k+1])+gNum(r[k+2]);      // Inversión Leads (Costa/Sierra o Machala/Quito)
+    var aware=gNum(r[k+3])+gNum(r[k+4]);     // Inversión AYF (awareness)
+    var consid=gNum(r[k+5])+gNum(r[k+6])+gNum(r[k+7])+gNum(r[k+8]); // Posicionamiento + Posventa
+    var leads=gNum(r[c.leads]), cpl=gNum(r[c.cpl]);
+    if(conv+aware+consid<=0 && leads<=0)continue;
+    recs.push({brand:f.marca,model:model,month:f.mes,aware:aware,consid:consid,conv:conv,leads:leads,cpl:cpl});
+  }
+  return recs;
+}
 function gBuild(f,rows){
+  if(f.digital) return gParseDigital(f,rows);
   var recs=[]; var mv=function(r,key){ var ci=f.map[key]; if(ci==null)return ""; return r[ci]!=null?String(r[ci]).trim():""; };
   for(var i=f.header+1;i<rows.length;i++){ var r=rows[i]; if(!r||!r.join("").trim())continue;
     if(f.tipo==="evento"){ var nm=mv(r,"nombre"); var cost=gNum(mv(r,"inversion")); if(!nm||cost<=0||gIsTotal(nm))continue;
@@ -722,24 +746,37 @@ function gRender(){
   if(f.error){ body='<div class="empty">No pude leer este archivo. Guárdalo como .xlsx o .csv y reintenta.</div>'; }
   else if(f.done){ body='<div class="empty">✓ Archivo ya cargado.</div>'; }
   else {
-    var rows=rowsOf(f); var hdr=rows[f.header]||[]; gAutoMap(f,hdr);
+    var rows=rowsOf(f);
+    if(!f._detected){ f.digCols=gDigCols(rows); f.digital=!!f.digCols; if(f.digital)f.tipo="pauta"; f._detected=true; }
     var sheetSel='<select id="gSheet">'+f.wb.SheetNames.map(function(sn){return '<option'+(sn===f.sheet?" selected":"")+'>'+esc(sn)+'</option>';}).join("")+'</select>';
     var brandSel='<select id="gMarca"><option value="">— elige —</option>'+BRANDS.map(function(x){return '<option value="'+x.key+'"'+(f.marca===x.key?" selected":"")+'>'+x.name+'</option>';}).join("")+'</select>';
-    var tipoSel='<select id="gTipo">'+[["evento","Evento / BTL"],["pauta","Pauta digital"],["trafico","Tráfico"]].map(function(t){return '<option value="'+t[0]+'"'+(f.tipo===t[0]?" selected":"")+'>'+t[1]+'</option>';}).join("")+'</select>';
-    var end=Math.min(rows.length,f.header+9);
-    var preview='<div class="gtable-wrap"><table class="gtable">'; for(var ri=0;ri<end;ri++){ var r=rows[ri]||[]; preview+='<tr'+(ri===f.header?' class="hrow"':'')+'>'; for(var ci=0;ci<Math.min(10,Math.max(r.length,hdr.length));ci++){ preview+='<td>'+esc(String(r[ci]==null?"":r[ci]).slice(0,16))+'</td>'; } preview+='</tr>'; } preview+='</table></div>';
-    var recs=gBuild(f,rows); var ready=recs.length&&f.marca&&f.mes;
-    body='<div class="frow3"><div class="field"><label>Hoja</label>'+sheetSel+'</div><div class="field"><label>Marca</label>'+brandSel+'</div><div class="field"><label>Tipo</label>'+tipoSel+'</div></div>'
-      +'<div class="frow"><div class="field"><label>Mes (año-mes)</label><input type="month" id="gMes" value="'+(f.mes||"")+'"><div class="ghint">Si el archivo no dice el mes, ponlo aquí.</div></div>'
-      +'<div class="field"><label>Fila de encabezados</label><input type="number" id="gHeader" min="0" value="'+f.header+'"><div class="ghint">Qué fila tiene los títulos (0 = la primera).</div></div></div>'
-      +preview
-      +'<div class="gmap">'+gMapFields(f,hdr)+'</div>'
-      +'<div class="gprev">Se cargarán <b>'+recs.length+'</b> registros'+(f.marca?'':' — elige la marca')+(f.mes?'':' — pon el mes')+'.</div>'
-      +'<div style="display:flex;gap:9px;margin-top:12px"><button class="btn primary" id="gImport"'+(ready?'':' disabled')+'>Cargar '+recs.length+' registros</button><button class="btn" id="gSkip">Saltar</button></div>';
+    var pend=Math.min(rows.length,16);
+    var previewD='<div class="gtable-wrap"><table class="gtable">'; for(var pr=0;pr<pend;pr++){ var rr=rows[pr]||[]; previewD+='<tr>'; for(var pc=0;pc<Math.min(12,rr.length);pc++){ previewD+='<td>'+esc(String(rr[pc]==null?"":rr[pc]).slice(0,14))+'</td>'; } previewD+='</tr>'; } previewD+='</table></div>';
+    if(f.digital){
+      var recsD=gParseDigital(f,rows); var readyD=recsD.length&&f.marca&&f.mes;
+      body='<div class="banner ok" style="margin:0 0 12px">✦ Detecté <b>formato de Pauta Digital</b>. Solo elige marca y mes — las columnas (CPL, Leads e Inversión por Leads/AYF/Posicionamiento) se leen solas.</div>'
+        +'<div class="frow3"><div class="field"><label>Hoja</label>'+sheetSel+'</div><div class="field"><label>Marca</label>'+brandSel+'</div><div class="field"><label>Mes (año-mes)</label><input type="month" id="gMes" value="'+(f.mes||"")+'"></div></div>'
+        +previewD
+        +'<div class="gprev">Se cargarán <b>'+recsD.length+'</b> modelos como pauta'+(f.marca?'':' — elige la marca')+(f.mes?'':' — pon el mes')+'. La inversión se reparte en awareness (AYF), consideración (posicionamiento) y conversión (leads).</div>'
+        +'<div style="display:flex;gap:9px;margin-top:12px"><button class="btn primary" id="gImport"'+(readyD?'':' disabled')+'>Cargar '+recsD.length+' modelos</button><button class="btn" id="gSkip">Saltar</button></div>';
+    } else {
+      var hdr=rows[f.header]||[]; gAutoMap(f,hdr);
+      var tipoSel='<select id="gTipo">'+[["evento","Evento / BTL"],["pauta","Pauta digital"],["trafico","Tráfico"]].map(function(t){return '<option value="'+t[0]+'"'+(f.tipo===t[0]?" selected":"")+'>'+t[1]+'</option>';}).join("")+'</select>';
+      var end=Math.min(rows.length,f.header+9);
+      var preview='<div class="gtable-wrap"><table class="gtable">'; for(var ri=0;ri<end;ri++){ var r=rows[ri]||[]; preview+='<tr'+(ri===f.header?' class="hrow"':'')+'>'; for(var ci=0;ci<Math.min(10,Math.max(r.length,hdr.length));ci++){ preview+='<td>'+esc(String(r[ci]==null?"":r[ci]).slice(0,16))+'</td>'; } preview+='</tr>'; } preview+='</table></div>';
+      var recs=gBuild(f,rows); var ready=recs.length&&f.marca&&f.mes;
+      body='<div class="frow3"><div class="field"><label>Hoja</label>'+sheetSel+'</div><div class="field"><label>Marca</label>'+brandSel+'</div><div class="field"><label>Tipo</label>'+tipoSel+'</div></div>'
+        +'<div class="frow"><div class="field"><label>Mes (año-mes)</label><input type="month" id="gMes" value="'+(f.mes||"")+'"><div class="ghint">Si el archivo no dice el mes, ponlo aquí.</div></div>'
+        +'<div class="field"><label>Fila de encabezados</label><input type="number" id="gHeader" min="0" value="'+f.header+'"><div class="ghint">Qué fila tiene los títulos (0 = la primera).</div></div></div>'
+        +preview
+        +'<div class="gmap">'+gMapFields(f,hdr)+'</div>'
+        +'<div class="gprev">Se cargarán <b>'+recs.length+'</b> registros'+(f.marca?'':' — elige la marca')+(f.mes?'':' — pon el mes')+'.</div>'
+        +'<div style="display:flex;gap:9px;margin-top:12px"><button class="btn primary" id="gImport"'+(ready?'':' disabled')+'>Cargar '+recs.length+' registros</button><button class="btn" id="gSkip">Saltar</button></div>';
+    }
   }
   b.innerHTML='<div class="gtabs">'+tabs+'</div>'+body;
   b.querySelectorAll(".gtab").forEach(function(t){ t.onclick=function(){ GST.cur=+t.dataset.i; gRender(); }; });
-  var on=function(id,key){ var e=el(id); if(!e)return; e.addEventListener("change",function(){ f[key]=(e.type==="number")?(+e.value):e.value; if(key==="sheet"){f.header=0;f._mapped=false;f.map={};} if(key==="tipo"){f._mapped=false;f.map={};} if(key==="header"){f._mapped=false;f.map={};} gRender(); }); };
+  var on=function(id,key){ var e=el(id); if(!e)return; e.addEventListener("change",function(){ f[key]=(e.type==="number")?(+e.value):e.value; if(key==="sheet"){f.header=0;f._mapped=false;f.map={};f._detected=false;} if(key==="tipo"){f._mapped=false;f.map={};} if(key==="header"){f._mapped=false;f.map={};} gRender(); }); };
   on("gSheet","sheet"); on("gMarca","marca"); on("gTipo","tipo"); on("gMes","mes"); on("gHeader","header");
   b.querySelectorAll("[data-map]").forEach(function(sel){ sel.onchange=function(){ f.map[sel.dataset.map]= sel.value===""?null:(+sel.value); gRender(); }; });
   if(el("gImport")) el("gImport").onclick=function(){ gImport(f); };
